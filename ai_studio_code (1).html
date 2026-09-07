@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remix 活動提醒小助手 - 完整版</title>
+  <meta name="description" content="依照每日心情與工作強度智慧提醒站立與活動的 AI 小助手，守護辦公室同仁身心健康，遠離久坐危害。" />
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React 18 & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Google Fonts: Noto Sans TC & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', 'Noto Sans TC', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-[#F9FAF7] text-[#34495E] antialiased selection:bg-[#8A9A5B]/20 selection:text-[#2D3436] min-h-screen flex flex-col">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // 星期名稱
+    const DAY_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+
+    // 5 種心情專屬設定與擴充的高畫質風景圖庫（每種 6 張，共 30 款）
+    const MOOD_CONFIGS = {
+      very_happy: {
+        id: 'very_happy',
+        label: '非常愉悅',
+        emoji: '✨😄',
+        tagline: '活力滿滿・元氣充沛',
+        colorClass: 'text-[#D35400]',
+        bgClass: 'bg-[#FDF2E9]',
+        borderClass: 'border-[#F39C12]',
+        ringClass: 'ring-2 ring-[#F39C12]/20',
+        themeDescription: '如陽光般耀眼明媚的海岸與金色向日葵花田，讓明朗的好心情轉化為豐沛的專注與活力！',
+        advice: {
+          greeting: '嗨！看到您今天精神飽滿又非常愉悅，真是太棒了！',
+          comfortMessage: '保持好心情的同時，也別忘了您已經持續專注了一小時。適時伸展能讓大腦的活力與創造力延續整個工作日！',
+          activityTip: '起身進行 1 分鐘「活力開合伸展」：雙手向上伸展拉長脊椎，輕轉肩膀向後轉動 5 次，走到窗邊享受自然光。',
+          waterTip: '趁著好心情去茶水間裝一杯 250ml 溫水或花草茶，補充水分，讓身體細胞也充滿元氣！',
+          breathingTip: '做 3 次充滿活力的腹式深呼吸，感受胸腔擴張的舒暢。'
+        },
+        images: [
+          { id: 'vh-1', url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80', title: '蔚藍艷陽熱帶海岸', location: '夏威夷・威基基海灘', moodVibe: '沐浴在金色陽光與無垠碧海中，心情燦爛奔放' },
+          { id: 'vh-2', url: 'https://images.unsplash.com/photo-1597848212624-a19eb35e2651?auto=format&fit=crop&w=1600&q=80', title: '迎向艷陽的燦爛向日葵花海', location: '義大利・托斯卡尼艷陽原野', moodVibe: '金黃飽滿的花盤迎向天際，散發生命向上的純粹能量' },
+          { id: 'vh-3', url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1600&q=80', title: '晨光萬丈的壯麗雪嶺峰巔', location: '瑞士・阿爾卑斯馬特洪峰', moodVibe: '金光披戴山巔，開闊視野令人精神為之一振' },
+          { id: 'vh-4', url: 'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=1600&q=80', title: '繽紛夢幻的地中海海崖小鎮', location: '希臘・聖托里尼懸崖愛琴海', moodVibe: '純白建築與湛藍海水交織出假期的歡愉樂章' },
+          { id: 'vh-5', url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1600&q=80', title: '宏偉壯麗的優勝美地溪谷晨暉', location: '美國・加州優勝美地國家公園', moodVibe: '清澈溪流倒映初升朝陽，活力奔放神清氣爽' },
+          { id: 'vh-6', url: 'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?auto=format&fit=crop&w=1600&q=80', title: '金色浪花拍打的晨曦海灘', location: '澳洲・黃金海岸衝浪天堂', moodVibe: '破曉朝霞映照海面，激發無窮熱情與創造力' }
+        ]
+      },
+      happy: {
+        id: 'happy',
+        label: '愉悅',
+        emoji: '🌿😊',
+        tagline: '節奏舒適・清爽明朗',
+        colorClass: 'text-[#8A9A5B]',
+        bgClass: 'bg-[#F4F9F2]',
+        borderClass: 'border-[#8A9A5B]',
+        ringClass: 'ring-2 ring-[#8A9A5B]/20',
+        themeDescription: '陽光穿透林梢的翠綠步道與微風青草地，陪伴您在平穩節奏中維持充沛思緒。',
+        advice: {
+          greeting: '哈囉！今天節奏愉快而順暢，是效率極高的一天呢！',
+          comfortMessage: '在順暢的工作節奏中，久坐不知不覺就達到 60 分鐘。起身活動 2 分鐘，能避免下肢血液循環淤滯，保護心血管。',
+          activityTip: '離開座位站立 1-2 分鐘，做雙手抱膝輪流提腿伸展，並輕柔轉動腳踝，緩解腰椎壓力。',
+          waterTip: '補充一杯清涼溫水，起身走動約 50 步，向身邊辛苦的夥伴打個招呼吧！',
+          breathingTip: '放鬆雙肩，閉上眼睛深吸氣 4 秒、緩慢吐氣 6 秒，讓眼睛充分休息。'
+        },
+        images: [
+          { id: 'h-1', url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1600&q=80', title: '晨曦透光的青蔥森林小徑', location: '德國・黑森林秘境步道', moodVibe: '綠葉散發清爽的芬多精，光影斑駁生機盎然' },
+          { id: 'h-2', url: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1600&q=80', title: '微風吹拂的清晨青青原野', location: '紐西蘭・南島翠綠丘陵', moodVibe: '開闊無垠的翠綠草浪，為雙眼帶來最溫柔的舒緩' },
+          { id: 'h-3', url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1600&q=80', title: '山嵐輕拂的翠綠山谷小澗', location: '奧地利・提洛爾清幽山谷', moodVibe: '流水潺潺與青苔綠意，給人輕快愉悅的步調' },
+          { id: 'h-4', url: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?auto=format&fit=crop&w=1600&q=80', title: '春風中的粉櫻林間大道', location: '日本・京都哲學之道', moodVibe: '花瓣輕輕飄落，心中滿溢柔軟與明亮好心情' },
+          { id: 'h-5', url: 'https://images.unsplash.com/photo-1511497584788-87676104235f?auto=format&fit=crop&w=1600&q=80', title: '薄霧瀰漫的晨光松林秘境', location: '加拿大・班夫國家公園翠松林', moodVibe: '深吸一口清甜松香空氣，身心舒暢放鬆' },
+          { id: 'h-6', url: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1600&q=80', title: '暖陽灑落的翠綠高山草原', location: '瑞士・格林德瓦阿爾卑斯綠茵', moodVibe: '微風送爽，步伐輕盈，思維清晰敏銳' }
+        ]
+      },
+      neutral: {
+        id: 'neutral',
+        label: '普通',
+        emoji: '💧😌',
+        tagline: '平靜沉穩・專注日常',
+        colorClass: 'text-[#34495E]',
+        bgClass: 'bg-[#F2F4EF]',
+        borderClass: 'border-[#7F8C8D]',
+        ringClass: 'ring-2 ring-[#7F8C8D]/20',
+        themeDescription: '如鏡面倒映的澄澈高山湖泊與靜謐藍天，幫心靈維持中正平和、去蕪存菁。',
+        advice: {
+          greeting: '提醒時間到囉！平穩踏實的工作步調值得好好守護。',
+          comfortMessage: '即使心情平和，久坐 1 小時仍會讓腰椎與頸椎承受巨大負擔。世界衛生組織提醒，定時中斷久坐是維持代謝健康的關鍵！',
+          activityTip: '立刻站起身！走到辦公室走廊或茶水間慢步 2 分鐘，做「辦公室擴胸挺背」，解除駝背壓迫。',
+          waterTip: '慢慢喝下一整杯溫水，補充足夠水分能促進大腦血液循環，改善午後昏睡。',
+          breathingTip: '將視線移開螢幕，望向 6 公尺外的遠景 20 秒，讓眼球睫狀肌完全放鬆。'
+        },
+        images: [
+          { id: 'n-1', url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1600&q=80', title: '平靜澄澈的群山倒影之湖', location: '美國・優勝美地幽靜湖水', moodVibe: '水面如鏡倒映穹蒼，讓雜念隨之沉澱歸零' },
+          { id: 'n-2', url: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=80', title: '靜謐悠然的清晨湖畔群島', location: '義大利・科莫湖清晨', moodVibe: '平和空靈的水天一色，讓日常的每一步踏實沉穩' },
+          { id: 'n-3', url: 'https://images.unsplash.com/photo-1426604966848-d7adac402bff?auto=format&fit=crop&w=1600&q=80', title: '清澈悠遠的藍天與悠悠白雲', location: '加拿大・洛磯山國家公園', moodVibe: '天地無界，開闊的景深迅速緩解長時間看螢幕的眼球疲勞' },
+          { id: 'n-4', url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1600&q=80', title: '微風輕搖的日式禪意竹林步道', location: '日本・京都嵐山竹林', moodVibe: '竹葉沙沙作響，靜坐心安，回歸專注的純粹本質' },
+          { id: 'n-5', url: 'https://images.unsplash.com/photo-1439853941329-a99ce0457e8a?auto=format&fit=crop&w=1600&q=80', title: '群山環抱的寶石藍鏡湖', location: '紐西蘭・瓦納卡湖純淨湖畔', moodVibe: '湖波不興，沉靜無喧囂，心思清澈透徹' },
+          { id: 'n-6', url: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=1600&q=80', title: '仰望天際的筆直杉木林', location: '美國・加州紅杉國家公園', moodVibe: '挺拔向上的巨樹給予穩固的心理支撐感' }
+        ]
+      },
+      bad: {
+        id: 'bad',
+        label: '心情不佳',
+        emoji: '🌅🥺',
+        tagline: '略感疲憊・需要療癒',
+        colorClass: 'text-[#8E44AD]',
+        bgClass: 'bg-[#F4ECF7]',
+        borderClass: 'border-[#8E44AD]',
+        ringClass: 'ring-2 ring-[#8E44AD]/20',
+        themeDescription: '溫暖柔和的落日金橙餘暉與薰衣草花田，如同一雙溫暖的手撫平焦慮與疲憊。',
+        advice: {
+          greeting: '辛苦了，感受到您今天有些疲憊，心情略感沉重。',
+          comfortMessage: '長時間坐在螢幕前會讓肌肉與自律神經緊繃。給自己 3 分鐘空白時間，你已經做得很好了！',
+          activityTip: '輕輕站起來，不要看螢幕。做「頸部側邊伸展」：頭部緩慢倒向左側 10 秒，再倒向右側 10 秒，釋放緊鎖的斜方肌。',
+          waterTip: '去裝一杯溫熱的開水，捧在手心感受溫度，小口慢飲，讓身心平靜下來。',
+          breathingTip: '練習「4-7-8 呼吸法」：吸氣 4 秒、屏息 7 秒、慢慢由口吐氣 8 秒，迅速安撫緊繃神經。'
+        },
+        images: [
+          { id: 'b-1', url: 'https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=1600&q=80', title: '溫暖療癒的金橙暮光落日', location: '加州・太平洋金色海岸', moodVibe: '落日餘暉溫柔包裹心房，提醒自己今天已經夠努力了' },
+          { id: 'b-2', url: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1600&q=80', title: '夕陽晚霞下的紫色薰衣草花田', location: '法國・普羅旺斯瓦朗索勒', moodVibe: '淡雅紫色的薰衣草隨晚風搖曳，帶來深度放鬆的芳香安撫' },
+          { id: 'b-3', url: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?auto=format&fit=crop&w=1600&q=80', title: '柔和粉紫色的暮光天際與棉花雲海', location: '夏威夷・茂宜島哈雷阿卡拉火山之巔', moodVibe: '柔和的粉紫光芒安撫緊繃的情緒，重拾心靈的鬆弛感' },
+          { id: 'b-4', url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80', title: '溫柔橘粉落日映照的靜謐海灘', location: '澳洲・拜倫灣日落時分', moodVibe: '海浪規律退下，將心中的焦慮與悶煩輕輕帶向遠洋' },
+          { id: 'b-5', url: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1600&q=80', title: '晚霞映照的安詳青青原野', location: '捷克・摩拉維亞金色波浪丘陵', moodVibe: '大地歸於寧靜，柔和光暈安撫疲憊神經' },
+          { id: 'b-6', url: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=1600&q=80', title: '暖橘色落日下的靜謐蘆葦叢', location: '荷蘭・羊角村落日水畔', moodVibe: '風吹草動輕聲細語，接納所有不完美的心緒' }
+        ]
+      },
+      very_bad: {
+        id: 'very_bad',
+        label: '心情非常不佳',
+        emoji: '🌌🌧️',
+        tagline: '極度疲累・迫切需要喘息',
+        colorClass: 'text-[#2D3436]',
+        bgClass: 'bg-[#EAEDED]',
+        borderClass: 'border-[#34495E]',
+        ringClass: 'ring-2 ring-[#34495E]/20',
+        themeDescription: '淅瀝雨夜中溫暖亮燈的木屋、沉靜浩瀚的星空與療癒極光，為你打造一處無條件接納的避風港。',
+        advice: {
+          greeting: '親愛的，深呼吸。今天真的很不容易，給辛苦的自己一個溫暖的抱抱。',
+          comfortMessage: '心情非常疲累時，更不能讓身體被椅子困住。久坐只會加深心理沉重感。現在就推開鍵盤，暫時放下待辦事項，你的健康與平靜比任何事情都珍貴！',
+          activityTip: '站立離開辦公桌，走到洗手間洗一把臉或到通風窗邊。放鬆甩甩雙手雙腳，像小樹在微風中輕輕晃動，抖落負面壓力。',
+          waterTip: '給自己沖一杯溫熱的舒緩飲品，慢慢喝，告訴自己：「這只是暫時的，一步一步來，我能照顧好自己。」',
+          breathingTip: '把手放在心口，緩緩閉上眼睛，做 5 次深長而溫柔的呼吸，釋放所有胸口的悶脹感。'
+        },
+        images: [
+          { id: 'vb-1', url: 'https://images.unsplash.com/photo-1510798831971-661eb04b3739?auto=format&fit=crop&w=1600&q=80', title: '雨幕中亮著溫暖橘光的森林木屋', location: '挪威・松恩峽灣深處秘境小木屋', moodVibe: '窗外細雨綿綿，屋內爐火正暖。外面風雨再大，這裡都是安全的避風港' },
+          { id: 'vb-2', url: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=1600&q=80', title: '浩瀚沉靜的深邃銀河星空', location: '智利・阿塔卡馬沙漠深空觀星', moodVibe: '面對百億光年的浩瀚繁星，眼前的工作煩惱都微小如塵埃，深深釋懷' },
+          { id: 'vb-3', url: 'https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?auto=format&fit=crop&w=1600&q=80', title: '漫天舞動的夢幻翡翠極光', location: '冰島・雷克雅維克極光天幕', moodVibe: '深邃夜空中流淌的綠色極光，如同心靈的溫柔撫慰劑，洗滌一切疲憊' },
+          { id: 'vb-4', url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1600&q=80', title: '療癒溫暖的燭光與茶香書桌角落', location: '北歐・冬季溫馨慢活時光', moodVibe: '點起一盞暖燈，深吸一口溫暖茶香。此刻，給自己百分之百的包容與休息' },
+          { id: 'vb-5', url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1600&q=80', title: '繁星璀璨的雪山靜夜', location: '瑞士・采爾馬特星夜', moodVibe: '銀白雪峰在星光下靜默佇立，將緊繃的心徹底安頓放鬆' },
+          { id: 'vb-6', url: 'https://images.unsplash.com/photo-1509114397022-ed747cca3f65?auto=format&fit=crop&w=1600&q=80', title: '雨後窗櫺上的晶瑩水珠與遠方燈火', location: '倫敦・雨夜放空片刻', moodVibe: '聽雨聲潺潺，讓紛擾隨水流褪去，給身心一個安靜的停頓' }
+        ]
+      }
+    };
+
+    // 內建合成 Web Audio 提示音（無須任何外掛音訊檔，完全自給自足）
+    function playChime(type = 'gentle') {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        let notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+        if (type === 'uplifting') notes = [523.25, 659.25, 783.99, 1046.5];
+        if (type === 'calm') notes = [392.00, 523.25, 659.25];
+
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.15);
+          gain.gain.setValueAtTime(0.001, ctx.currentTime + idx * 0.15);
+          gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + idx * 0.15 + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + idx * 0.15 + 0.85);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + idx * 0.15);
+          osc.stop(ctx.currentTime + idx * 0.15 + 0.85);
+        });
+      } catch (e) {
+        console.warn('Audio play failed:', e);
+      }
+    }
+
+    function App() {
+      // 排程設定 (預設週二、週四為高壓日)
+      const [weeklySchedule, setWeeklySchedule] = useState(() => {
+        try {
+          const saved = localStorage.getItem('activity_schedule');
+          if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return {
+          highStressDays: [2, 4],
+          highStressTimeSlot: 'all_day',
+          defaultIntensity: 'medium'
+        };
+      });
+
+      const [currentMood, setCurrentMood] = useState('happy');
+      const [workIntensity, setWorkIntensity] = useState('medium');
+      const [totalSeconds, setTotalSeconds] = useState(3600);
+      const [secondsLeft, setSecondsLeft] = useState(3600);
+      const [isRunning, setIsRunning] = useState(true);
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [toastMessage, setToastMessage] = useState(null);
+      const [currentImageIndex, setCurrentImageIndex] = useState(0);
+      const [showHealthDetails, setShowHealthDetails] = useState(false);
+
+      // 打卡紀錄
+      const [logs, setLogs] = useState(() => {
+        try {
+          const saved = localStorage.getItem('activity_logs');
+          if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return [];
+      });
+
+      // 彈窗打卡勾選項目狀態
+      const [stoodUp, setStoodUp] = useState(true);
+      const [drankWater, setDrankWater] = useState(false);
+      const [stretched, setStretched] = useState(false);
+
+      // 日期與星期
+      const todayDate = new Date();
+      const todayDayOfWeek = todayDate.getDay();
+      const currentDayName = DAY_NAMES[todayDayOfWeek];
+      const isTodayHighStress = weeklySchedule.highStressDays.includes(todayDayOfWeek);
+
+      const standCount = logs.filter(l => l.completedActivities.stoodUp).length;
+      const waterCount = logs.filter(l => l.completedActivities.drankWater).length;
+
+      // 持久化儲存
+      useEffect(() => {
+        localStorage.setItem('activity_schedule', JSON.stringify(weeklySchedule));
+      }, [weeklySchedule]);
+
+      useEffect(() => {
+        localStorage.setItem('activity_logs', JSON.stringify(logs));
+      }, [logs]);
+
+      // 計時器
+      useEffect(() => {
+        if (!isRunning) return;
+        const interval = setInterval(() => {
+          setSecondsLeft(prev => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              setIsRunning(false);
+              playChime(currentMood === 'bad' || currentMood === 'very_bad' ? 'calm' : 'uplifting');
+              setIsModalOpen(true);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        return () => clearInterval(interval);
+      }, [isRunning, currentMood]);
+
+      const showToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(null), 3500);
+      };
+
+      const handleSelectMood = (mood) => {
+        setCurrentMood(mood);
+        setTotalSeconds(3600);
+        setSecondsLeft(3600);
+        setIsRunning(true);
+        setCurrentImageIndex(0);
+        showToast(`已設定【${MOOD_CONFIGS[mood].label}】心情！1 小時後將自動彈出專屬活動提醒。`);
+      };
+
+      const handleCompleteSession = () => {
+        const newLog = {
+          id: Date.now().toString(),
+          timestamp: Date.now(),
+          mood: currentMood,
+          completedActivities: { stoodUp, drankWater, stretched }
+        };
+        setLogs(prev => [newLog, ...prev]);
+        setIsModalOpen(false);
+        setTotalSeconds(3600);
+        setSecondsLeft(3600);
+        setIsRunning(true);
+        playChime('uplifting');
+        showToast('太棒了！已完成本次健康打卡，自動啟動下一個 1 小時防久坐計時。');
+      };
+
+      const handleSnooze = (minutes) => {
+        setIsModalOpen(false);
+        const s = minutes * 60;
+        setTotalSeconds(s);
+        setSecondsLeft(s);
+        setIsRunning(true);
+        showToast(`已設定 ${minutes} 分鐘後再次提醒您活動。`);
+      };
+
+      const toggleHighStressDay = (day) => {
+        const exists = weeklySchedule.highStressDays.includes(day);
+        const newDays = exists 
+          ? weeklySchedule.highStressDays.filter(d => d !== day) 
+          : [...weeklySchedule.highStressDays, day];
+        setWeeklySchedule({ ...weeklySchedule, highStressDays: newDays });
+      };
+
+      const formatTime = (secs) => {
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      };
+
+      const activeConfig = MOOD_CONFIGS[currentMood];
+      const currentImage = activeConfig.images[currentImageIndex] || activeConfig.images[0];
+      const progressPercent = Math.max(0, Math.min(100, ((totalSeconds - secondsLeft) / totalSeconds) * 100));
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* 頂部導航欄 */}
+          <header className="bg-white border-b border-[#E0E4D9] sticky top-0 z-30 shadow-xs">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#8A9A5B] text-white flex items-center justify-center font-bold text-lg shadow-xs">
+                  🌿
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="font-semibold text-[#2D3436] text-base sm:text-lg tracking-tight">
+                      活動提醒小助手
+                    </h1>
+                    <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-[#F2F4EF] text-[#8A9A5B] border border-[#E0E4D9]">
+                      AI 智能身心守護
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#7F8C8D] hidden sm:block">
+                    依每日心情與工作強度定時提醒站立與活動，告別辦公室久坐危機
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => playChime('gentle')}
+                  className="p-2 rounded-xl text-[#7F8C8D] hover:text-[#2D3436] hover:bg-[#F2F4EF] transition-colors"
+                  title="測試提示音"
+                >
+                  🔔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-[#8A9A5B] hover:bg-[#78884C] text-white shadow-xs transition-colors flex items-center gap-1.5"
+                >
+                  <span>🔔 預覽提醒視窗</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Toast 提示條 */}
+          {toastMessage && (
+            <div className="fixed top-20 right-4 z-50 max-w-sm bg-[#2D3436] text-white px-4 py-3 rounded-2xl shadow-xl border border-[#34495E] text-xs flex items-center gap-2.5">
+              <span>✨</span>
+              <span>{toastMessage}</span>
+            </div>
+          )}
+
+          {/* 主版面 */}
+          <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
+            
+            {/* 卡片 1: 固定高壓力日設定 */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#E0E4D9]">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#8A9A5B] text-white flex items-center justify-center text-lg shadow-xs">
+                    📅
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-[#2D3436] text-base flex items-center gap-2">
+                      固定高壓力日設定
+                      <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-[#F2F4EF] text-[#8A9A5B] border border-[#E0E4D9]">
+                        AI 客製化依據
+                      </span>
+                    </h3>
+                    <p className="text-xs text-[#7F8C8D]">
+                      系統將在這些日子自動增加提醒頻率與關懷溫度（例如：週二、週四）。
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${
+                  isTodayHighStress 
+                    ? 'bg-[#FDF2E9] text-[#F39C12] border-[#F39C12]/40 animate-pulse' 
+                    : 'bg-[#F4F9F2] text-[#8A9A5B] border-[#8A9A5B]/40'
+                }`}>
+                  {isTodayHighStress ? `🔥 今天 (${currentDayName})：高壓警戒日` : `✅ 今天 (${currentDayName})：平穩工作日`}
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-1">
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#34495E]">設定高壓日（週一至週日）：</span>
+                    <div className="flex items-center gap-1.5 text-xs text-[#7F8C8D]">
+                      <span>快捷設定：</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setWeeklySchedule({ ...weeklySchedule, highStressDays: [2, 4] })}
+                        className="px-2 py-0.5 rounded-full bg-[#F2F4EF] hover:bg-[#E0E4D9] text-[#34495E]"
+                      >
+                        週二/週四 (例)
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => setWeeklySchedule({ ...weeklySchedule, highStressDays: [1, 3, 5] })}
+                        className="px-2 py-0.5 rounded-full bg-[#F2F4EF] hover:bg-[#E0E4D9] text-[#34495E]"
+                      >
+                        一/三/五
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => setWeeklySchedule({ ...weeklySchedule, highStressDays: [] })}
+                        className="px-1.5 py-0.5 rounded-full hover:bg-[#F2F4EF] text-[#95A5A6]"
+                      >
+                        清除
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center gap-1 sm:gap-2">
+                    {[
+                      { day: 1, label: '週一', short: '一' },
+                      { day: 2, label: '週二', short: '二' },
+                      { day: 3, label: '週三', short: '三' },
+                      { day: 4, label: '週四', short: '四' },
+                      { day: 5, label: '週五', short: '五' },
+                      { day: 6, label: '週六', short: '六' },
+                      { day: 0, label: '週日', short: '日' }
+                    ].map(({ day, label, short }) => {
+                      const isSelected = weeklySchedule.highStressDays.includes(day);
+                      const isToday = todayDayOfWeek === day;
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => toggleHighStressDay(day)}
+                          className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-full flex flex-col items-center justify-center text-xs font-semibold transition-all border ${
+                            isSelected
+                              ? 'bg-[#8A9A5B] text-white border-[#8A9A5B] shadow-xs'
+                              : 'bg-white border-[#E0E4D9] text-[#34495E] hover:bg-[#F2F4EF]'
+                          }`}
+                        >
+                          {isToday && (
+                            <span className={`text-[9px] font-bold px-1 rounded-full absolute -top-1.5 ${
+                              isSelected ? 'bg-[#F39C12] text-white' : 'bg-[#2D3436] text-white'
+                            }`}>
+                              今
+                            </span>
+                          )}
+                          <span>{short}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 工作強度與時段 */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#F9FAF7] p-3.5 rounded-2xl border border-[#E0E4D9]">
+                  <div className="flex-1">
+                    <span className="text-xs font-semibold text-[#34495E] block mb-1.5">當前工作強度：</span>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { id: 'light', label: '平緩輕鬆' },
+                        { id: 'medium', label: '正常節奏' },
+                        { id: 'high', label: '高壓衝刺' }
+                      ].map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setWorkIntensity(item.id)}
+                          className={`py-1.5 px-2 rounded-xl text-xs font-medium border text-center transition-all ${
+                            workIntensity === item.id
+                              ? item.id === 'high' ? 'bg-[#F39C12] text-white border-[#F39C12]' : 'bg-[#8A9A5B] text-white border-[#8A9A5B]'
+                              : 'bg-white text-[#7F8C8D] hover:bg-[#F2F4EF] border-[#E0E4D9]'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="sm:border-l sm:border-[#E0E4D9] sm:pl-3 pt-2 sm:pt-0">
+                    <span className="text-xs text-[#7F8C8D] block mb-1.5">高壓時段：</span>
+                    <div className="flex items-center gap-1">
+                      {[
+                        { id: 'all_day', label: '全天' },
+                        { id: 'morning', label: '上午' },
+                        { id: 'afternoon', label: '下午' }
+                      ].map(slot => (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          onClick={() => setWeeklySchedule({ ...weeklySchedule, highStressTimeSlot: slot.id })}
+                          className={`px-2.5 py-1 rounded-lg text-xs ${
+                            weeklySchedule.highStressTimeSlot === slot.id
+                              ? 'bg-[#2D3436] text-white font-medium'
+                              : 'bg-white text-[#7F8C8D] hover:bg-[#F2F4EF] border border-[#E0E4D9]'
+                          }`}
+                        >
+                          {slot.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 卡片 2: 5 種心情按鈕 */}
+            <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-[#E0E4D9] space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-[#2D3436]">現在的心情如何？</h2>
+                  <p className="text-sm text-[#7F8C8D] mt-0.5">點選後，我們將在 1 小時後為您推薦專屬風景與活動提醒。</p>
+                </div>
+                <div className="text-xs font-bold text-[#8A9A5B] flex items-center gap-1.5 bg-[#F2F4EF] px-3.5 py-1.5 rounded-full border border-[#E0E4D9]">
+                  <span className="w-2 h-2 rounded-full bg-[#8A9A5B] animate-ping"></span>
+                  <span>當前：{activeConfig.label}（1 小時提醒已就緒）</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {['very_happy', 'happy', 'neutral', 'bad', 'very_bad'].map(key => {
+                  const cfg = MOOD_CONFIGS[key];
+                  const isSelected = currentMood === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleSelectMood(key)}
+                      className={`group relative rounded-2xl p-4 text-center transition-all border flex flex-col items-center justify-between min-h-[140px] cursor-pointer ${
+                        isSelected 
+                          ? `${cfg.bgClass} ${cfg.borderClass} ${cfg.ringClass} shadow-sm` 
+                          : 'bg-white border-[#E0E4D9] hover:bg-gray-50'
+                      }`}
+                    >
+                      {isSelected && (
+                        <div className="absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#8A9A5B] text-white">
+                          已選
+                        </div>
+                      )}
+                      <div className="flex flex-col items-center w-full mt-1">
+                        <span className="text-4xl mb-2 transition-transform group-hover:scale-110">{cfg.emoji}</span>
+                        <h3 className={`font-bold text-sm ${isSelected ? cfg.colorClass : 'text-[#7F8C8D]'}`}>{cfg.label}</h3>
+                        <span className="text-[11px] text-[#95A5A6] mt-0.5 line-clamp-1">{cfg.tagline.split('・')[0]}</span>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-[#E0E4D9]/60 w-full text-[10px] text-[#95A5A6] truncate">
+                        <span>{cfg.images.length} 款自然風景</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 卡片 3: 1 小時倒數計時器 */}
+            <div className="bg-[#8A9A5B] text-white rounded-3xl p-6 sm:p-7 shadow-sm border border-[#7A8A4B] relative overflow-hidden">
+              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="space-y-3 text-center md:text-left flex-1 w-full">
+                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/20 text-white border border-white/25">
+                      <span className="w-2 h-2 rounded-full bg-[#BDC317] animate-pulse"></span>
+                      1 小時防久坐健康防護中
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-white/15 border border-white/25 text-white">
+                      <span>{activeConfig.emoji}</span>
+                      <span>{activeConfig.label}推薦</span>
+                    </span>
+                    {isTodayHighStress && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#FDF2E9] text-[#F39C12]">
+                        🔥 高壓日模式
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="text-4xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight flex items-baseline justify-center md:justify-start gap-2">
+                      <span>{formatTime(secondsLeft)}</span>
+                      <span className="text-sm sm:text-base font-normal text-white/70 font-sans">
+                        / {Math.round(totalSeconds / 60)} 分鐘
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-white/90 mt-1">
+                      倒數結束後，將自動彈出專屬活動提醒視窗，包含 <strong>{activeConfig.label}</strong> 風景、AI 智能關懷語與起身微伸展。
+                    </p>
+                  </div>
+
+                  <div className="w-full bg-black/15 rounded-full h-2.5 overflow-hidden border border-white/10">
+                    <div className="h-full rounded-full transition-all duration-500 ease-out bg-white" style={{ width: `${progressPercent}%` }}></div>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-white/80">
+                    <span>已專注 {Math.floor((totalSeconds - secondsLeft) / 60)} 分鐘</span>
+                    <span>防護進度 {Math.round(progressPercent)}%</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row md:flex-col items-center gap-3 w-full md:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(true)}
+                    className="w-full sm:w-auto px-5 py-3 rounded-2xl font-bold text-sm bg-white hover:bg-[#F2F4EF] text-[#2D3436] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>🔔 立即彈出提醒視窗 (體驗效果)</span>
+                  </button>
+
+                  <div className="flex items-center gap-2 w-full justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsRunning(!isRunning)}
+                      className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/20 transition-colors"
+                    >
+                      {isRunning ? '⏸ 暫停' : '▶ 繼續'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTotalSeconds(3600);
+                        setSecondsLeft(3600);
+                        setIsRunning(true);
+                        showToast('已重設為 1 小時！');
+                      }}
+                      className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/20 transition-colors"
+                    >
+                      🔄 重設 1hr
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTotalSeconds(10);
+                        setSecondsLeft(10);
+                        setIsRunning(true);
+                        showToast('設定為 10 秒倒數快速測試！');
+                      }}
+                      className="px-3 py-2 rounded-xl text-xs font-medium bg-[#BDC317]/30 hover:bg-[#BDC317]/40 text-white border border-white/25 transition-colors"
+                    >
+                      ⚡ 10秒測試
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 卡片 4: 久坐健康防護數據與醫學科普 */}
+            <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-[#E0E4D9]">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#F4F9F2] text-[#8A9A5B] border border-[#E0E4D9] flex items-center justify-center text-xl">
+                    🩺
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-[#2D3436] text-base flex items-center gap-2">
+                      久坐健康防護數據與醫學指引
+                      <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-[#F2F4EF] text-[#8A9A5B] border border-[#E0E4D9]">
+                        世界衛生組織 WHO 警示
+                      </span>
+                    </h3>
+                    <p className="text-xs text-[#7F8C8D]">
+                      每坐在電腦前 1 小時中斷久坐一次，能有效重啟脂蛋白脂肪酶，減少心血管疾病與全因死亡風險。
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowHealthDetails(!showHealthDetails)}
+                  className="text-xs font-medium text-[#34495E] hover:text-[#2D3436] bg-[#F2F4EF] hover:bg-[#E0E4D9] px-3.5 py-1.5 rounded-full border border-[#E0E4D9] transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>{showHealthDetails ? '收合醫學科普 🔼' : '查看久坐危害科普 🔽'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-4 rounded-2xl bg-[#F9FAF7] border border-[#E0E4D9]">
+                  <div className="text-xs text-[#7F8C8D] mb-1">今日站立次數</div>
+                  <div className="text-2xl font-bold text-[#2D3436]">{standCount} <span className="text-xs font-normal text-[#7F8C8D]">次</span></div>
+                  <div className="text-[11px] text-[#8A9A5B] mt-0.5">目標：每工作時數 1 次</div>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#F9FAF7] border border-[#E0E4D9]">
+                  <div className="text-xs text-[#7F8C8D] mb-1">補水杯數</div>
+                  <div className="text-2xl font-bold text-[#2D3436]">{waterCount} <span className="text-xs font-normal text-[#7F8C8D]">杯</span></div>
+                  <div className="text-[11px] text-[#7F8C8D] mt-0.5">約 {waterCount * 250} ml 飲水量</div>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#F9FAF7] border border-[#E0E4D9]">
+                  <div className="text-xs text-[#7F8C8D] mb-1">健康防護時數</div>
+                  <div className="text-2xl font-bold text-[#2D3436]">{standCount} <span className="text-xs font-normal text-[#7F8C8D]">小時</span></div>
+                  <div className="text-[11px] text-[#8A9A5B] mt-0.5">避免連續靜態久坐</div>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#F9FAF7] border border-[#E0E4D9]">
+                  <div className="text-xs text-[#7F8C8D] mb-1">防護達成率</div>
+                  <div className="text-2xl font-bold text-[#2D3436]">{Math.min(100, Math.round((standCount / 8) * 100))}%</div>
+                  <div className="text-[11px] text-[#8A9A5B] mt-0.5">{standCount >= 6 ? '表現極佳！' : '持續保持！'}</div>
+                </div>
+              </div>
+
+              {showHealthDetails && (
+                <div className="mt-4 pt-4 border-t border-[#E0E4D9] text-xs text-[#34495E] space-y-3">
+                  <div className="p-4 bg-[#FDF2E9] rounded-2xl border border-[#F39C12]/30">
+                    <h4 className="font-bold text-[#D35400] mb-1">⚠️ 為什麼辦公室久坐會「間接增加死亡風險」？</h4>
+                    <p className="text-[#34495E] leading-relaxed">
+                      根據《刺胳針》（The Lancet）與世界衛生組織研究，長時間連續坐著超過 60 分鐘，大腿肌群的電生理活動幾乎完全停止，分解血液脂肪的「脂蛋白脂肪酶（LPL）」活性驟降 90% 以上，導致血糖升高、血液濃稠與深層靜脈栓塞風險倍增。每天久坐超過 8 小時且無定時中斷者，全因死亡風險顯著增加 20%~40%。
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-3.5 bg-[#F9FAF7] rounded-2xl border border-[#E0E4D9]">
+                      <span className="font-semibold text-[#2D3436] block mb-1">1. 單純站立即有奇效</span>
+                      <span className="text-[#7F8C8D]">只要離開椅子站立，腿部與核心肌群即被喚醒，下肢靜脈瓣膜重新擠壓血液回流心臟，逆轉血管阻力。</span>
+                    </div>
+                    <div className="p-3.5 bg-[#F9FAF7] rounded-2xl border border-[#E0E4D9]">
+                      <span className="font-semibold text-[#2D3436] block mb-1">2. 裝水建立動態習慣</span>
+                      <span className="text-[#7F8C8D]">起身走到茶水間裝水能強迫雙眼看向 6 公尺以上遠方，舒緩睫狀肌，同時補充代謝所需水分子。</span>
+                    </div>
+                    <div className="p-3.5 bg-[#F9FAF7] rounded-2xl border border-[#E0E4D9]">
+                      <span className="font-semibold text-[#2D3436] block mb-1">3. 心情與身體雙向調節</span>
+                      <span className="text-[#7F8C8D]">身體姿勢影響血清素與皮質醇。在感到疲累或心情不佳時站立活動，能顯著降低焦慮與腦霧。</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </main>
+
+          {/* 頁腳 */}
+          <footer className="border-t border-[#E0E4D9] bg-white py-4 text-center text-xs text-[#7F8C8D]">
+            <p>活動提醒小助手 • 守護辦公室同仁身心健康 • 定時站立、補充水分與放鬆伸展，守護每一天</p>
+          </footer>
+
+          {/* 1 小時到期跳出提醒彈窗 Modal */}
+          {isModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-md overflow-y-auto">
+              <div className="relative w-full max-w-3xl bg-[#F9FAF7] rounded-3xl shadow-2xl overflow-hidden border border-[#E0E4D9] my-auto">
+                
+                {/* 彈窗頂部 */}
+                <div className="px-6 py-4 bg-white text-[#34495E] flex items-center justify-between border-b border-[#E0E4D9]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-[#8A9A5B] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      AI
+                    </div>
+                    <div>
+                      <span className="font-semibold text-sm text-[#2D3436] flex items-center gap-2">
+                        活動提醒小助手
+                        <span className="text-[11px] font-normal px-2.5 py-0.5 rounded-full bg-[#F2F4EF] text-[#8A9A5B] border border-[#E0E4D9]">
+                          時隔 1 小時健康喚醒
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => playChime('calm')}
+                      className="p-2 rounded-full text-[#7F8C8D] hover:text-[#2D3436] hover:bg-[#F2F4EF]"
+                      title="播放冥想風鈴音"
+                    >
+                      🔔
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="p-2 rounded-full text-[#7F8C8D] hover:text-[#2D3436] hover:bg-[#F2F4EF]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* 風景照片容器與多圖切換 */}
+                <div className="relative h-56 sm:h-64 md:h-72 w-full overflow-hidden bg-slate-900 group">
+                  <img
+                    src={currentImage.url}
+                    alt={currentImage.title}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#2D3436]/90 via-[#2D3436]/30 to-transparent pointer-events-none"></div>
+
+                  {/* 切換上一張 / 下一張 */}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentImageIndex((currentImageIndex - 1 + activeConfig.images.length) % activeConfig.images.length)}
+                    className="absolute inset-y-0 left-3 my-auto h-10 w-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center text-lg backdrop-blur-xs"
+                    title="上一張風景"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentImageIndex((currentImageIndex + 1) % activeConfig.images.length)}
+                    className="absolute inset-y-0 right-3 my-auto h-10 w-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center text-lg backdrop-blur-xs"
+                    title="下一張風景"
+                  >
+                    ▶
+                  </button>
+
+                  {/* 心情標籤 */}
+                  <div className="absolute top-3 left-3 flex flex-wrap gap-2 items-center">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold shadow-sm backdrop-blur-md bg-white/90 text-[#2D3436]">
+                      <span>{activeConfig.emoji}</span>
+                      <span>{activeConfig.label} 專屬風景</span>
+                    </span>
+                    {isTodayHighStress && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-[#FDF2E9] text-[#F39C12] border border-[#F39C12]/40">
+                        🔥 高壓日加強關懷
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 風景資訊與 6 款圖片微型切換條 */}
+                  <div className="absolute bottom-3 left-5 right-5 text-white">
+                    <div className="flex items-center justify-between gap-2 text-xs mb-1">
+                      <div className="flex items-center gap-1.5 text-[#BDC317] font-medium truncate">
+                        <span>📍 {currentImage.location}</span>
+                        <span className="text-white/60">•</span>
+                        <span className="text-white/80">{currentImageIndex + 1} / {activeConfig.images.length} 張風景</span>
+                      </div>
+
+                      {/* 圖片切換指示點 */}
+                      <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md p-1 px-2 rounded-full border border-white/20">
+                        {activeConfig.images.map((img, idx) => (
+                          <button
+                            key={img.id}
+                            type="button"
+                            onClick={() => setCurrentImageIndex(idx)}
+                            title={img.title}
+                            className={`h-2 rounded-full transition-all cursor-pointer ${
+                              currentImageIndex === idx ? 'w-6 bg-white' : 'w-2 bg-white/40 hover:bg-white/80'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <h2 className="text-lg sm:text-xl font-bold text-white drop-shadow-md truncate">{currentImage.title}</h2>
+                    <p className="text-xs text-white/90 line-clamp-1 mt-0.5">{currentImage.moodVibe}</p>
+                  </div>
+                </div>
+
+                {/* 彈窗主體內容 */}
+                <div className="p-5 sm:p-6 space-y-4">
+                  
+                  {/* 久坐急迫警告條 */}
+                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-[#FDF2E9] border border-[#F39C12]/30 text-[#D35400]">
+                    <div className="w-8 h-8 rounded-xl bg-white text-[#F39C12] flex items-center justify-center shrink-0 mt-0.5 font-bold shadow-xs">
+                      ⚠️
+                    </div>
+                    <div className="text-xs sm:text-sm">
+                      <span className="font-bold text-[#D35400]">您已經在電腦前坐滿 60 分鐘！</span>
+                      <span className="text-[#34495E] ml-1">
+                        醫學研究證實，久坐會使下肢循環驟降、肌肉電活動歸零，並間接增加心血管與全因死亡風險。只要現在
+                        <strong className="font-bold text-[#D35400]"> 起身站立 2~3 分鐘</strong>，就能迅速重啟新陳代謝！
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* AI 智能關懷語 */}
+                  <div className="bg-white rounded-2xl p-5 border border-[#E0E4D9]">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-2 text-xs font-bold text-[#2D3436]">
+                        <span>✨ 活動提醒小助手 AI 智能關懷語</span>
+                      </div>
+                      <span className="text-[11px] text-[#7F8C8D] font-medium">
+                        {isTodayHighStress ? `排程高壓時段（${currentDayName}）` : '平穩常態工作'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 text-[#34495E] text-xs sm:text-sm leading-relaxed">
+                      <p className="font-semibold text-[#2D3436] text-sm">{activeConfig.advice.greeting}</p>
+                      <p className="text-[#7F8C8D]">{activeConfig.advice.comfortMessage}</p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        <div className="bg-[#F9FAF7] p-3.5 rounded-xl border border-[#E0E4D9]">
+                          <span className="font-semibold text-[#2D3436] text-xs block mb-0.5">🏃 推薦活動/伸展</span>
+                          <span className="text-xs text-[#7F8C8D]">{activeConfig.advice.activityTip}</span>
+                        </div>
+                        <div className="bg-[#F9FAF7] p-3.5 rounded-xl border border-[#E0E4D9]">
+                          <span className="font-semibold text-[#2D3436] text-xs block mb-0.5">💧 水分補給</span>
+                          <span className="text-xs text-[#7F8C8D]">{activeConfig.advice.waterTip}</span>
+                        </div>
+                      </div>
+
+                      {activeConfig.advice.breathingTip && (
+                        <div className="bg-[#F4F9F2] p-3 rounded-xl border border-[#8A9A5B]/30 text-xs text-[#8A9A5B]">
+                          <span>🌬️ <strong>微呼吸練習：</strong>{activeConfig.advice.breathingTip}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 起身打卡勾選三步驟 */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-[#2D3436] mb-2 flex items-center justify-between">
+                      <span>起身行動打卡（勾選後累積守護紀錄）：</span>
+                      <span className="text-[11px] font-normal text-[#7F8C8D]">只需花費 2-3 分鐘</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setStoodUp(!stoodUp)}
+                        className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                          stoodUp ? 'bg-[#F4F9F2] border-[#8A9A5B] text-[#8A9A5B]' : 'bg-white border-[#E0E4D9] text-[#7F8C8D]'
+                        }`}
+                      >
+                        <div>
+                          <span className="text-xs font-semibold block">1. 離開椅子站立</span>
+                          <span className="text-[10px] text-[#7F8C8D]">走動或單純站著</span>
+                        </div>
+                        <span className="text-lg">{stoodUp ? '✅' : '⚪'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDrankWater(!drankWater)}
+                        className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                          drankWater ? 'bg-[#F4F9F2] border-[#8A9A5B] text-[#8A9A5B]' : 'bg-white border-[#E0E4D9] text-[#7F8C8D]'
+                        }`}
+                      >
+                        <div>
+                          <span className="text-xs font-semibold block">2. 裝一杯溫水</span>
+                          <span className="text-[10px] text-[#7F8C8D]">補充 250ml 水分</span>
+                        </div>
+                        <span className="text-lg">{drankWater ? '✅' : '⚪'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStretched(!stretched)}
+                        className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                          stretched ? 'bg-[#F4F9F2] border-[#8A9A5B] text-[#8A9A5B]' : 'bg-white border-[#E0E4D9] text-[#7F8C8D]'
+                        }`}
+                      >
+                        <div>
+                          <span className="text-xs font-semibold block">3. 伸展或深呼吸</span>
+                          <span className="text-[10px] text-[#7F8C8D]">放鬆肩頸與雙眼</span>
+                        </div>
+                        <span className="text-lg">{stretched ? '✅' : '⚪'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 心情快速切換 */}
+                  <div className="pt-2 border-t border-[#E0E4D9] flex flex-wrap items-center justify-between gap-2 text-xs text-[#7F8C8D]">
+                    <span>若心情有所轉變，可直接切換：</span>
+                    <div className="flex items-center gap-1.5">
+                      {['very_happy', 'happy', 'neutral', 'bad', 'very_bad'].map(mKey => (
+                        <button
+                          key={mKey}
+                          type="button"
+                          onClick={() => {
+                            setCurrentMood(mKey);
+                            setCurrentImageIndex(0);
+                          }}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium border cursor-pointer ${
+                            currentMood === mKey ? 'bg-[#8A9A5B] text-white border-[#8A9A5B]' : 'bg-white text-[#7F8C8D] border-[#E0E4D9]'
+                          }`}
+                        >
+                          {MOOD_CONFIGS[mKey].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 彈窗底座操作區 */}
+                <div className="px-6 py-4 bg-white border-t border-[#E0E4D9] flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleSnooze(5)}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-2xl text-xs font-semibold text-[#34495E] bg-white hover:bg-[#F2F4EF] border border-[#E0E4D9] cursor-pointer"
+                    >
+                      ⏱️ 再休息 5 分鐘後提醒
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentImageIndex((currentImageIndex + 1) % activeConfig.images.length)}
+                      className="px-3 py-2.5 rounded-2xl text-xs font-medium text-[#7F8C8D] hover:text-[#2D3436] hover:bg-[#F2F4EF] border border-[#E0E4D9] cursor-pointer"
+                    >
+                      🖼️ 換一張風景 ({currentImageIndex + 1}/{activeConfig.images.length})
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCompleteSession}
+                    className="w-full sm:w-auto px-6 py-3 rounded-2xl text-sm font-semibold text-white bg-[#8A9A5B] hover:bg-[#78884C] shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>✅ 完成打卡，開始下一個 1 小時</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
